@@ -1,0 +1,174 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@100;300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 200 30% 9%;
+    --foreground: 0 0% 100%;
+    --card: 200 28% 13%;
+    --card-foreground: 0 0% 100%;
+    --popover: 200 28% 13%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 197 90% 47%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 200 20% 18%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 200 20% 18%;
+    --muted-foreground: 200 10% 60%;
+    --accent: 197 90% 47%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 200 20% 20%;
+    --input: 200 20% 20%;
+    --ring: 197 90% 47%;
+    --radius: 0.5rem;
+    
+    --aviation-primary: #0c9ce4;
+    --aviation-dark: #101c22;
+    --aviation-light: #f5f7f8;
+    --aviation-glass: rgba(34, 60, 73, 0.4);
+    --aviation-success: #10b981;
+    --aviation-warning: #f59e0b;
+    --aviation-danger: #ef4444;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply bg-[#101c22] text-white antialiased;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  
+  code, pre, .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-[rgba(34,60,73,0.4)] backdrop-blur-md border border-white/10 rounded-lg;
+  }
+  
+  .glass-panel {
+    @apply bg-[rgba(16,28,34,0.8)] backdrop-blur-lg border border-white/5;
+  }
+  
+  .aviation-input {
+    @apply bg-[rgba(34,60,73,0.6)] border border-white/20 rounded px-4 py-3 text-white placeholder:text-white/40 focus:outline-none focus:border-[#0c9ce4] focus:ring-1 focus:ring-[#0c9ce4] transition-all;
+  }
+  
+  .aviation-btn {
+    @apply px-6 py-3 bg-[#0c9ce4] text-white font-medium rounded hover:bg-[#0a8bc9] active:scale-95 transition-all duration-200;
+  }
+  
+  .aviation-btn-secondary {
+    @apply px-6 py-3 bg-white/10 text-white font-medium rounded border border-white/20 hover:bg-white/20 active:scale-95 transition-all duration-200;
+  }
+  
+  .status-success {
+    @apply text-[#10b981];
+  }
+  
+  .status-warning {
+    @apply text-[#f59e0b];
+  }
+  
+  .status-danger {
+    @apply text-[#ef4444];
+  }
+  
+  .scan-line {
+    @apply absolute w-full h-px bg-gradient-to-r from-transparent via-[#0c9ce4]/50 to-transparent;
+    animation: scan 4s linear infinite;
+  }
+  
+  .radar-pulse {
+    @apply absolute rounded-full border border-[#0c9ce4]/30;
+    animation: radar-pulse 2s ease-out infinite;
+  }
+  
+  .text-glow {
+    text-shadow: 0 0 10px rgba(12, 156, 228, 0.5), 0 0 20px rgba(12, 156, 228, 0.3);
+  }
+  
+  .terminal-cursor::after {
+    content: '█';
+    @apply text-[#0c9ce4] animate-pulse ml-1;
+  }
+}
+
+@layer utilities {
+  .precision-out {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes scan {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@keyframes radar-pulse {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes typewriter {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+/* Leaflet Map Customization */
+.leaflet-container {
+  background: #101c22 !important;
+}
+
+.leaflet-popup-content-wrapper {
+  @apply bg-[rgba(34,60,73,0.95)] text-white rounded-lg border border-white/20;
+}
+
+.leaflet-popup-tip {
+  @apply bg-[rgba(34,60,73,0.95)];
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-[#101c22];
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-[#0c9ce4]/30 rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-[#0c9ce4]/50;
+}
+
+/* Selection */
+::selection {
+  @apply bg-[#0c9ce4]/30 text-white;
+}
