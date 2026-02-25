@@ -52,14 +52,26 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   useEffect(() => {
     const fetch_ = async () => {
       try {
-        const res = await fetch('https://aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=json&stationString=OOSA&hoursBeforeNow=3');
+        const res = await fetch('https://aviationweather.gov/api/data/metar?ids=OOSA&format=json&hours=3');
         const data = await res.json();
-        if (data.METAR?.length > 0) {
-          const m = data.METAR[0];
-          setWeather({ metar:m.raw_text, windDir:m.wind_dir_degrees||0, windSpeed:m.wind_speed_kt||0, visibility:m.visibility_statute_mi||0, temperature:m.temp_c||0, dewpoint:m.dewpoint_c||0, qnh:m.altim_in_hg?Math.round(m.altim_in_hg*33.8639):0, clouds:m.sky_condition?.[0]?.sky_cover||'CLR' });
-        }
+        const arr = Array.isArray(data) ? data : data.METAR;
+        if (arr?.length > 0) {
+          const m = arr[0];
+          const visRaw = m.visib ?? m.visibility_statute_mi ?? 0;
+          const visMi = visRaw > 100 ? parseFloat((visRaw / 1609.34).toFixed(1)) : visRaw;
+          setWeather({
+            metar: m.rawOb || m.raw_text || '',
+            windDir: m.wdir ?? m.wind_dir_degrees ?? 0,
+            windSpeed: m.wspd ?? m.wind_speed_kt ?? 0,
+            visibility: visMi,
+            temperature: m.temp ?? m.temp_c ?? 0,
+            dewpoint: m.dewp ?? m.dewpoint_c ?? 0,
+            qnh: m.altim ? Math.round(m.altim) : m.altim_in_hg ? Math.round(m.altim_in_hg * 33.8639) : 0,
+            clouds: m.cover ?? m.sky_condition?.[0]?.sky_cover ?? 'CLR',
+          });
+        } else { throw new Error('no data'); }
       } catch {
-        setWeather({ metar:'METAR OOSA 121050Z 18005KT 9999 FEW025 31/26 Q1008 NOSIG', windDir:180, windSpeed:5, visibility:6.2, temperature:31, dewpoint:26, qnh:1008, clouds:'FEW' });
+        setWeather({ metar:'METAR OOSA — unavailable', windDir:0, windSpeed:0, visibility:0, temperature:0, dewpoint:0, qnh:0, clouds:'CLR' });
       }
     };
     fetch_();
