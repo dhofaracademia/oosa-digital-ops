@@ -52,7 +52,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   useEffect(() => {
     const fetch_ = async () => {
       try {
-        const res = await fetch('https://aviationweather.gov/api/data/metar?ids=OOSA&format=json&hours=3');
+        const res = await fetch('https://corsproxy.io/?https://aviationweather.gov/api/data/metar?ids=OOSA&format=json&hours=3');
         const data = await res.json();
         const arr = Array.isArray(data) ? data : data.METAR;
         if (arr?.length > 0) {
