@@ -49,7 +49,7 @@ export default function WeatherStation() {
     // ── METAR (new NOAA API) ─────────────────────────────────────────────
     try {
       const res = await fetch(
-        'https://aviationweather.gov/api/data/metar?ids=OOSA&format=json&hours=3'
+        'https://corsproxy.io/?https://aviationweather.gov/api/data/metar?ids=OOSA&format=json&hours=3'
       );
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
@@ -99,7 +99,7 @@ export default function WeatherStation() {
     // ── TAF (new NOAA API) ───────────────────────────────────────────────
     try {
       const res = await fetch(
-        'https://aviationweather.gov/api/data/taf?ids=OOSA&format=json&time=valid'
+        'https://corsproxy.io/?https://aviationweather.gov/api/data/taf?ids=OOSA&format=json&time=valid'
       );
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
