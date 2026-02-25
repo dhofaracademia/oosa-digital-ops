@@ -1,8 +1,7 @@
-base: '/oosa-digital-ops/',
-```
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-Then push again:
-```
-git add .
-git commit -m "fix base path"
-git push
+export default defineConfig({
+  plugins: [react()],
+  base: '/oosanotam/',
+})
