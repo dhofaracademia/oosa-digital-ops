@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Plane, 
   Cloud, 
@@ -35,12 +35,43 @@ interface FlightStats {
   departing: number;
 }
 
+const OOSA = { lat: 17.0389, lon: 54.0914 };
+
+declare global {
+  interface Window { L: any; }
+}
+
+function loadLeaflet(): Promise<void> {
+  return new Promise((resolve) => {
+    if (window.L) { resolve(); return; }
+    if (!document.querySelector('link[href*="leaflet"]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    if (!document.querySelector('script[src*="leaflet"]')) {
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.onload = () => resolve();
+      document.head.appendChild(script);
+    } else {
+      const poll = setInterval(() => { if (window.L) { clearInterval(poll); resolve(); } }, 50);
+    }
+  });
+}
+
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [flights, setFlights] = useState<FlightStats>({ active: 0, arriving: 0, departing: 0 });
   const [, setLoading] = useState({ weather: true, flights: true });
 
-  // Fetch weather data
+  const miniMapRef = useRef<HTMLDivElement>(null);
+  const miniMapInstance = useRef<any>(null);
+  const miniMapInitialized = useRef(false);
+  const miniMarkersRef = useRef<any[]>([]);
+
+  // ── Fetch weather ──────────────────────────────────────────────────────
   useEffect(() => {
     const fetchWeather = async () => {
       try {
@@ -48,8 +79,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           'https://aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=json&stationString=OOSA&hoursBeforeNow=3'
         );
         const data = await response.json();
-        
-        if (data.METAR && data.METAR.length > 0) {
+        if (data.METAR?.length > 0) {
           const metar = data.METAR[0];
           setWeather({
             metar: metar.raw_text,
@@ -62,59 +92,122 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             clouds: metar.sky_condition?.[0]?.sky_cover || 'CLR'
           });
         }
-      } catch (error) {
-        console.error('Weather fetch error:', error);
-        // Fallback data
+      } catch {
         setWeather({
           metar: 'METAR OOSA 121050Z 18005KT 9999 FEW025 31/26 Q1008 NOSIG',
-          windDir: 180,
-          windSpeed: 5,
-          visibility: 6.2,
-          temperature: 31,
-          dewpoint: 26,
-          qnh: 1008,
-          clouds: 'FEW'
+          windDir: 180, windSpeed: 5, visibility: 6.2,
+          temperature: 31, dewpoint: 26, qnh: 1008, clouds: 'FEW'
         });
       } finally {
         setLoading(prev => ({ ...prev, weather: false }));
       }
     };
-
     fetchWeather();
-    const interval = setInterval(fetchWeather, 300000); // 5 minutes
+    const interval = setInterval(fetchWeather, 300000);
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch flight data
-  useEffect(() => {
-    const fetchFlights = async () => {
-      try {
-        // OpenSky Network API - bounding box around OOSA
-        const response = await fetch(
-          'https://opensky-network.org/api/states/all?lamin=16.2889&lamax=17.7889&lomin=53.3414&lomax=54.8414'
-        );
-        const data = await response.json();
-        
-        if (data.states) {
-          const active = data.states.length;
-          const arriving = data.states.filter((s: number[]) => s[7] && s[7] < 5000).length;
-          const departing = data.states.filter((s: number[]) => s[7] && s[7] > 5000 && s[7] < 15000).length;
-          setFlights({ active, arriving, departing });
+  // ── Fetch flights ──────────────────────────────────────────────────────
+  const fetchFlights = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `https://opensky-network.org/api/states/all?lamin=${OOSA.lat - 1.5}&lamax=${OOSA.lat + 1.5}&lomin=${OOSA.lon - 1.5}&lomax=${OOSA.lon + 1.5}`
+      );
+      const data = await response.json();
+      if (data.states) {
+        const active = data.states.length;
+        const arriving = data.states.filter((s: any[]) => s[7] && s[7] < 1524).length;
+        const departing = data.states.filter((s: any[]) => s[7] && s[7] > 1524 && s[7] < 4572).length;
+        setFlights({ active, arriving, departing });
+
+        // Update mini-map markers
+        const L = window.L;
+        if (L && miniMapInstance.current) {
+          miniMarkersRef.current.forEach(m => m.remove());
+          miniMarkersRef.current = [];
+          data.states
+            .filter((s: any[]) => s[6] && s[5])
+            .slice(0, 30) // limit for performance
+            .forEach((s: any[]) => {
+              const alt = Math.round((s[7] || 0) * 3.28084);
+              const color = alt > 25000 ? '#0c9ce4' : alt > 10000 ? '#10b981' : '#f59e0b';
+              const heading = Math.round(s[10] || 0);
+              const icon = L.divIcon({
+                className: '',
+                html: `<div style="transform:rotate(${heading}deg);color:${color};font-size:14px;line-height:1;filter:drop-shadow(0 0 2px ${color}80);">✈</div>`,
+                iconSize: [16, 16],
+                iconAnchor: [8, 8],
+              });
+              const callsign = (s[1] as string)?.trim() || 'Unknown';
+              const marker = L.marker([s[6], s[5]], { icon })
+                .addTo(miniMapInstance.current)
+                .bindPopup(`<b style="color:${color}">${callsign}</b><br/>${alt.toLocaleString()} ft`);
+              miniMarkersRef.current.push(marker);
+            });
         }
-      } catch (error) {
-        console.error('Flight fetch error:', error);
-        // Fallback demo data
-        setFlights({ active: 12, arriving: 4, departing: 3 });
-      } finally {
-        setLoading(prev => ({ ...prev, flights: false }));
+      }
+    } catch {
+      setFlights({ active: 12, arriving: 4, departing: 3 });
+    } finally {
+      setLoading(prev => ({ ...prev, flights: false }));
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFlights();
+    const interval = setInterval(fetchFlights, 30000);
+    return () => clearInterval(interval);
+  }, [fetchFlights]);
+
+  // ── Init mini Leaflet map ──────────────────────────────────────────────
+  useEffect(() => {
+    if (miniMapInitialized.current || !miniMapRef.current) return;
+    miniMapInitialized.current = true;
+
+    loadLeaflet().then(() => {
+      const L = window.L;
+      if (!L || !miniMapRef.current || miniMapInstance.current) return;
+
+      const map = L.map(miniMapRef.current, {
+        center: [OOSA.lat, OOSA.lon],
+        zoom: 8,
+        zoomControl: false,
+        attributionControl: false,
+        dragging: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        boxZoom: false,
+        keyboard: false,
+      });
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        subdomains: 'abcd', maxZoom: 18,
+      }).addTo(map);
+
+      // Airport dot
+      L.divIcon && L.marker([OOSA.lat, OOSA.lon], {
+        icon: L.divIcon({
+          className: '',
+          html: `<div style="width:10px;height:10px;background:#0c9ce4;border:2px solid white;border-radius:50%;box-shadow:0 0 6px #0c9ce4;"></div>`,
+          iconSize: [10, 10], iconAnchor: [5, 5],
+        })
+      }).addTo(map).bindPopup('<b>OOSA / SLL</b><br/>Salalah International');
+
+      miniMapInstance.current = map;
+      // Trigger flight fetch to populate markers
+      fetchFlights();
+    });
+
+    return () => {
+      if (miniMapInstance.current) {
+        miniMapInstance.current.remove();
+        miniMapInstance.current = null;
+        miniMapInitialized.current = false;
       }
     };
+  }, [fetchFlights]);
 
-    fetchFlights();
-    const interval = setInterval(fetchFlights, 15000); // 15 seconds
-    return () => clearInterval(interval);
-  }, []);
-
+  // ── Stats & modules ────────────────────────────────────────────────────
   const quickStats = [
     {
       id: 'flights',
@@ -137,42 +230,24 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   ];
 
   const modules = [
-    {
-      id: 'radar',
-      title: 'Live Flight Radar',
-      description: 'Real-time ADS-B tracking within 50nm of OOSA',
-      icon: Radar,
-      color: '#0c9ce4',
-      status: 'Live'
-    },
-    {
-      id: 'weather',
-      title: 'Weather Station',
-      description: 'METAR, TAF, and meteorological data',
-      icon: Cloud,
-      color: '#10b981',
-      status: 'Updated'
-    },
-    {
-      id: 'fpl',
-      title: 'Flight Plan Validator',
-      description: 'ICAO flight plan format validation',
-      icon: FileText,
-      color: '#f59e0b',
-      status: 'Ready'
-    },
-    {
-      id: 'notam',
-      title: 'NOTAM Decoder',
-      description: 'Decode raw ICAO NOTAM messages',
-      icon: AlertTriangle,
-      color: '#ef4444',
-      status: 'Ready'
-    }
+    { id: 'radar',   title: 'Live Flight Radar',      description: 'Real-time ADS-B tracking within 50nm of OOSA', icon: Radar,        color: '#0c9ce4', status: 'Live'    },
+    { id: 'weather', title: 'Weather Station',         description: 'METAR, TAF, and meteorological data',          icon: Cloud,        color: '#10b981', status: 'Updated' },
+    { id: 'fpl',     title: 'Flight Plan Validator',   description: 'ICAO flight plan format validation',           icon: FileText,     color: '#f59e0b', status: 'Ready'   },
+    { id: 'notam',   title: 'NOTAM Decoder',           description: 'Decode raw ICAO NOTAM messages',               icon: AlertTriangle, color: '#ef4444', status: 'Ready'  },
   ];
 
   return (
     <div className="space-y-6">
+      {/* Leaflet CSS for popups */}
+      <style>{`
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+          background: #101c22 !important;
+          color: white !important;
+          border: 1px solid rgba(12,156,228,0.3) !important;
+        }
+        .leaflet-container { background: #101c22; }
+      `}</style>
+
       {/* Welcome Header */}
       <div className="glass-card p-6 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 opacity-10">
@@ -185,8 +260,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Flight Operations Center</h2>
           <p className="text-white/60 max-w-2xl">
-            Real-time flight tracking, weather monitoring, and flight plan validation for 
-            <span className="text-[#0c9ce4] font-medium"> Salalah International Airport (OOSA/SLL)</span>
+            Real-time flight tracking, weather monitoring, and flight plan validation for{' '}
+            <span className="text-[#0c9ce4] font-medium">Salalah International Airport (OOSA/SLL)</span>
           </p>
         </div>
       </div>
@@ -194,7 +269,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {quickStats.map((stat) => (
-          <div 
+          <div
             key={stat.id}
             onClick={() => onNavigate(stat.module)}
             className="glass-card p-5 cursor-pointer hover:bg-white/5 transition-all group"
@@ -205,7 +280,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 <p className="text-3xl font-bold text-white mono">{stat.value}</p>
                 <p className="text-white/40 text-sm mt-1">{stat.subtext}</p>
               </div>
-              <div 
+              <div
                 className="w-12 h-12 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
                 style={{ backgroundColor: `${stat.color}20` }}
               >
@@ -220,7 +295,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         ))}
       </div>
 
-      {/* Live Radar Preview */}
+      {/* Live Radar Preview — Leaflet mini-map (no iframe) */}
       <div className="glass-card p-1 relative">
         <div className="flex items-center justify-between px-4 py-3">
           <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -231,23 +306,32 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               <span className="text-xs text-[#10b981] font-normal">LIVE</span>
             </div>
           </h3>
-          <button 
+          <button
             onClick={() => onNavigate('radar')}
             className="text-sm text-[#0c9ce4] hover:underline flex items-center gap-1"
           >
             Full Radar <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
-        <div className="h-[350px] rounded-b-lg overflow-hidden relative">
-          <iframe
-            src="https://globe.adsbexchange.com/?lat=17.0389&lon=54.0914&zoom=8"
-            title="ADS-B Exchange Live Radar Preview"
+
+        {/* Leaflet mini-map container */}
+        <div className="relative h-[350px] rounded-b-lg overflow-hidden">
+          <div
+            ref={miniMapRef}
             className="w-full h-full"
-            style={{ border: 'none', backgroundColor: '#101c22' }}
-            loading="lazy"
+            style={{ background: '#101c22' }}
           />
-          <div className="absolute bottom-3 left-3 z-10 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg pointer-events-none">
-            <span className="text-xs text-white/70">OOSA / SLL — Salalah International</span>
+          {/* Click-to-expand overlay */}
+          <div
+            className="absolute inset-0 z-[400] cursor-pointer"
+            onClick={() => onNavigate('radar')}
+            title="Click to open full radar"
+          />
+          <div className="absolute bottom-3 left-3 z-[500] bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg pointer-events-none">
+            <span className="text-xs text-white/70">OOSA / SLL — Salalah International · Click for full radar</span>
+          </div>
+          <div className="absolute top-3 right-3 z-[500] bg-black/60 backdrop-blur-sm px-2 py-1 rounded-lg pointer-events-none">
+            <span className="text-xs text-white/50">{flights.active} aircraft</span>
           </div>
         </div>
       </div>
@@ -265,29 +349,26 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               onClick={() => onNavigate(module.id as ModuleType)}
               className="glass-card p-5 cursor-pointer hover:bg-white/5 transition-all group relative overflow-hidden"
             >
-              <div 
+              <div
                 className="absolute top-0 right-0 w-20 h-20 opacity-5 rounded-full -translate-y-1/2 translate-x-1/2"
                 style={{ backgroundColor: module.color }}
-              ></div>
-              
+              />
               <div className="flex items-start justify-between mb-4">
-                <div 
+                <div
                   className="w-10 h-10 rounded-lg flex items-center justify-center"
                   style={{ backgroundColor: `${module.color}20` }}
                 >
                   <module.icon className="w-5 h-5" style={{ color: module.color }} />
                 </div>
-                <span 
+                <span
                   className="text-xs px-2 py-1 rounded-full"
                   style={{ backgroundColor: `${module.color}20`, color: module.color }}
                 >
                   {module.status}
                 </span>
               </div>
-              
               <h4 className="text-white font-semibold mb-1">{module.title}</h4>
               <p className="text-white/50 text-sm">{module.description}</p>
-              
               <div className="mt-4 flex items-center gap-2 text-sm opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: module.color }}>
                 <span>Open</span>
                 <ArrowRight className="w-4 h-4" />
@@ -305,48 +386,28 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               <Cloud className="w-5 h-5 text-[#0c9ce4]" />
               Current Conditions
             </h3>
-            <button 
-              onClick={() => onNavigate('weather')}
-              className="text-sm text-[#0c9ce4] hover:underline"
-            >
+            <button onClick={() => onNavigate('weather')} className="text-sm text-[#0c9ce4] hover:underline">
               Full Report →
             </button>
           </div>
-          
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white/5 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-white/50 text-sm mb-1">
-                <Wind className="w-4 h-4" />
-                Wind
-              </div>
+              <div className="flex items-center gap-2 text-white/50 text-sm mb-1"><Wind className="w-4 h-4" />Wind</div>
               <p className="text-xl font-bold text-white mono">{weather.windDir}°/{weather.windSpeed}kt</p>
             </div>
-            
             <div className="bg-white/5 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-white/50 text-sm mb-1">
-                <Eye className="w-4 h-4" />
-                Visibility
-              </div>
+              <div className="flex items-center gap-2 text-white/50 text-sm mb-1"><Eye className="w-4 h-4" />Visibility</div>
               <p className="text-xl font-bold text-white mono">{weather.visibility} mi</p>
             </div>
-            
             <div className="bg-white/5 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-white/50 text-sm mb-1">
-                <Thermometer className="w-4 h-4" />
-                Temperature
-              </div>
+              <div className="flex items-center gap-2 text-white/50 text-sm mb-1"><Thermometer className="w-4 h-4" />Temperature</div>
               <p className="text-xl font-bold text-white mono">{weather.temperature}°C</p>
             </div>
-            
             <div className="bg-white/5 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-white/50 text-sm mb-1">
-                <Droplets className="w-4 h-4" />
-                QNH
-              </div>
+              <div className="flex items-center gap-2 text-white/50 text-sm mb-1"><Droplets className="w-4 h-4" />QNH</div>
               <p className="text-xl font-bold text-white mono">{weather.qnh} hPa</p>
             </div>
           </div>
-          
           <div className="mt-4 p-3 bg-black/30 rounded-lg">
             <p className="text-xs text-white/50 mb-1">Raw METAR</p>
             <p className="text-sm text-[#0c9ce4] mono">{weather.metar}</p>
@@ -371,9 +432,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               <span className="text-sm text-white/70">Systems</span>
             </div>
           </div>
-          <div className="text-xs text-white/40">
-            Last updated: {new Date().toLocaleTimeString()}
-          </div>
+          <div className="text-xs text-white/40">Last updated: {new Date().toLocaleTimeString()}</div>
         </div>
       </div>
 
