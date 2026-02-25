@@ -49,7 +49,7 @@ export default function WeatherStation() {
     // ── METAR (new NOAA API) ─────────────────────────────────────────────
     try {
       const res = await fetch(
-        'https://corsproxy.io/?https://corsproxy.io/?https://aviationweather.gov/api/data/metar?ids=OOSA&format=json&hours=3'
+        'https://corsproxy.io/?https://aviationweather.gov/api/data/metar?ids=OOSA&format=json&hours=3'
       );
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
