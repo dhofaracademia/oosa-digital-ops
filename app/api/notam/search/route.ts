@@ -44,6 +44,17 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await res.json()
+
+    // AVWX returns an array of NOTAMs at root level
+    if (Array.isArray(data)) {
+      return NextResponse.json({
+        notams: data.map((n: Record<string, unknown>) => ({
+          raw: n.raw || n.text || n.body || "",
+          ...n,
+        })),
+      })
+    }
+
     return NextResponse.json(data)
   } catch {
     return NextResponse.json(
