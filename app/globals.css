@@ -1,0 +1,150 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@100;300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-space-grotesk: 'Space Grotesk', sans-serif;
+    --font-jetbrains-mono: 'JetBrains Mono', monospace;
+
+    --background: 200 30% 9%;
+    --foreground: 0 0% 100%;
+    --card: 200 28% 13%;
+    --card-foreground: 0 0% 100%;
+    --popover: 200 28% 13%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 197 90% 47%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 200 20% 18%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 200 20% 18%;
+    --muted-foreground: 200 10% 60%;
+    --accent: 197 90% 47%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 200 20% 20%;
+    --input: 200 20% 20%;
+    --ring: 197 90% 47%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-av-dark text-foreground antialiased;
+    font-family: var(--font-space-grotesk);
+  }
+  code, pre, .mono {
+    font-family: var(--font-jetbrains-mono);
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-[rgba(34,60,73,0.4)] backdrop-blur-md border border-white/10 rounded-lg;
+  }
+  .glass-panel {
+    @apply bg-[rgba(16,28,34,0.8)] backdrop-blur-lg border border-white/5;
+  }
+  .aviation-input {
+    @apply bg-[rgba(34,60,73,0.6)] border border-white/20 rounded px-4 py-3 text-foreground placeholder:text-white/40 focus:outline-none focus:border-av-primary focus:ring-1 focus:ring-av-primary transition-all;
+  }
+  .aviation-btn {
+    @apply px-6 py-3 bg-av-primary text-foreground font-medium rounded hover:bg-[#0a8bc9] active:scale-95 transition-all duration-200;
+  }
+  .aviation-btn-secondary {
+    @apply px-6 py-3 bg-white/10 text-foreground font-medium rounded border border-white/20 hover:bg-white/20 active:scale-95 transition-all duration-200;
+  }
+  .radar-pulse {
+    @apply absolute rounded-full border border-av-primary/30;
+    animation: radar-pulse 2s ease-out infinite;
+  }
+}
+
+/* Glass card hover effects */
+.glass-card {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Smooth transitions for all interactive elements */
+button, a, input, textarea, select {
+  transition: all 0.2s ease;
+}
+
+/* Focus styles */
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(12, 156, 228, 0.3);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #101c22;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(12, 156, 228, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(12, 156, 228, 0.5);
+}
+
+/* Selection */
+::selection {
+  background: rgba(12, 156, 228, 0.3);
+  color: white;
+}
+
+/* Leaflet dark theme */
+.leaflet-container {
+  background: #101c22 !important;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: rgba(34, 60, 73, 0.95) !important;
+  color: #fff !important;
+  border: 1px solid rgba(12, 156, 228, 0.3) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6) !important;
+}
+.leaflet-popup-content {
+  margin: 0 !important;
+}
+.leaflet-control-attribution {
+  background: rgba(16, 28, 34, 0.8) !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+  font-size: 9px !important;
+}
+.leaflet-control-attribution a {
+  color: rgba(12, 156, 228, 0.6) !important;
+}
+.leaflet-control-zoom a {
+  background: rgba(16, 28, 34, 0.9) !important;
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+.leaflet-control-zoom a:hover {
+  background: rgba(12, 156, 228, 0.2) !important;
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
