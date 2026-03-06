@@ -16,6 +16,8 @@ interface Aircraft {
 }
 
 const OOSA = { lat: 17.0389, lon: 54.0914 }
+const RANGE = 1.5
+const OPENSKY_URL = `https://opensky-network.org/api/states/all?lamin=${OOSA.lat - RANGE}&lamax=${OOSA.lat + RANGE}&lomin=${OOSA.lon - RANGE}&lomax=${OOSA.lon + RANGE}`
 const ADSB_FULL_URL = "https://globe.adsbexchange.com/?lat=17.0389&lon=54.0914&zoom=9"
 
 function getColor(alt: number) {
@@ -62,10 +64,24 @@ export default function FlightRadarInner() {
   const fetchAircraft = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch("/api/flights")
-      if (!res.ok) throw new Error("failed")
+      // Direct browser call to OpenSky — no server needed
+      const res = await fetch(OPENSKY_URL, { signal: AbortSignal.timeout(12000) })
+      if (!res.ok) throw new Error("OpenSky returned " + res.status)
       const data = await res.json()
-      setAircraft(data.aircraft || [])
+      const parsed: Aircraft[] = (data.states ?? [])
+        .map((s: (string | number | boolean | null)[]) => ({
+          icao24: s[0] as string,
+          callsign: ((s[1] as string) || "").trim() || "Unknown",
+          lat: s[6] as number,
+          lon: s[5] as number,
+          altitude: Math.round(((s[7] as number) || 0) * 3.28084),
+          speed: Math.round(((s[9] as number) || 0) * 1.94384),
+          heading: Math.round((s[10] as number) || 0),
+          verticalRate: Math.round(((s[11] as number) || 0) * 196.85),
+          onGround: s[8] as boolean,
+        }))
+        .filter((a: Aircraft) => a.lat && a.lon)
+      setAircraft(parsed)
       setApiStatus("live")
       setLastUpdate(new Date())
     } catch {
@@ -132,7 +148,7 @@ export default function FlightRadarInner() {
             </>
           )}
           {apiStatus === "unavailable" && (
-            <div className="flex items-center gap-2"><AlertCircle className="w-4 h-4 text-av-warning" /><span className="text-sm text-av-warning">OpenSky unavailable -- try refreshing</span></div>
+            <div className="flex items-center gap-2"><AlertCircle className="w-4 h-4 text-av-warning" /><span className="text-sm text-av-warning">OpenSky unavailable — try refreshing</span></div>
           )}
           <div className="ml-auto flex items-center gap-3">
             {lastUpdate && <span className="text-xs text-white/40">Updated: {lastUpdate.toLocaleTimeString()}</span>}
@@ -175,7 +191,7 @@ export default function FlightRadarInner() {
                           <tbody>
                             <tr><td style={{ opacity: 0.5, paddingRight: "8px" }}>ALT</td><td>{ac.altitude.toLocaleString()} ft</td></tr>
                             <tr><td style={{ opacity: 0.5, paddingRight: "8px" }}>SPD</td><td>{ac.speed} kts</td></tr>
-                            <tr><td style={{ opacity: 0.5, paddingRight: "8px" }}>HDG</td><td>{ac.heading}deg</td></tr>
+                            <tr><td style={{ opacity: 0.5, paddingRight: "8px" }}>HDG</td><td>{ac.heading}°</td></tr>
                             <tr><td style={{ opacity: 0.5, paddingRight: "8px" }}>V/S</td><td>{ac.verticalRate > 0 ? "+" : ""}{ac.verticalRate} fpm</td></tr>
                           </tbody>
                         </table>
@@ -187,10 +203,10 @@ export default function FlightRadarInner() {
             </MapContainer>
             <div className="absolute top-3 left-3 z-[1000] glass-card px-3 py-1.5 flex items-center gap-2 pointer-events-none">
               <div className="w-2 h-2 bg-av-success rounded-full animate-pulse" />
-              <span className="text-xs text-white font-medium">LIVE - {aircraft.length} aircraft</span>
+              <span className="text-xs text-white font-medium">LIVE — {aircraft.length} aircraft</span>
             </div>
             <div className="absolute bottom-3 left-3 z-[1000] glass-card px-3 py-1.5 pointer-events-none">
-              <span className="text-xs text-white/70">OOSA / SLL -- Salalah International</span>
+              <span className="text-xs text-white/70">OOSA / SLL — Salalah International</span>
             </div>
             {apiStatus === "loading" && (
               <div className="absolute inset-0 z-[999] flex items-center justify-center bg-av-dark/60 rounded-lg">
@@ -242,7 +258,7 @@ export default function FlightRadarInner() {
                     </div>
                     {selected?.icao24 === ac.icao24 && (
                       <div className="mt-3 pt-3 border-t border-white/10 grid grid-cols-2 gap-2 text-xs">
-                        <div><span className="text-white/40">Heading</span><p className="text-white font-mono">{ac.heading}deg</p></div>
+                        <div><span className="text-white/40">Heading</span><p className="text-white font-mono">{ac.heading}°</p></div>
                         <div><span className="text-white/40">V/S</span><p className={`font-mono ${ac.verticalRate > 0 ? "text-green-400" : ac.verticalRate < 0 ? "text-red-400" : "text-white"}`}>{ac.verticalRate > 0 ? "+" : ""}{ac.verticalRate} fpm</p></div>
                         <div><span className="text-white/40">Position</span><p className="text-white font-mono">{ac.lat.toFixed(3)}, {ac.lon.toFixed(3)}</p></div>
                         <div><span className="text-white/40">Status</span><p className="text-white">{ac.onGround ? "Ground" : "Airborne"}</p></div>
@@ -267,7 +283,7 @@ export default function FlightRadarInner() {
           <p className="text-sm text-white/60">
             <span className="text-white font-medium">Live radar</span> powered by{" "}
             <a href="https://opensky-network.org/" target="_blank" rel="noopener noreferrer" className="text-av-primary hover:underline">OpenSky Network</a>.
-            Refreshes every 30s. Click aircraft for details.
+            Refreshes every 30s. Click aircraft for details. Rate limits may apply for anonymous access.
           </p>
         </div>
       </div>
