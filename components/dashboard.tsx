@@ -14,6 +14,9 @@ interface WeatherData {
 }
 interface FlightStats { active: number; arriving: number; departing: number }
 
+const OOSA = { lat: 17.0389, lon: 54.0914 }
+const RANGE = 1.5
+
 export default function Dashboard() {
   const [weather, setWeather] = useState<WeatherData | null>(null)
   const [flights, setFlights] = useState<FlightStats>({ active: 0, arriving: 0, departing: 0 })
@@ -21,7 +24,11 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchWeather = async () => {
       try {
-        const res = await fetch("/api/weather?station=OOSA&type=metar")
+        // Direct call to NOAA — CORS-enabled, no server needed
+        const res = await fetch(
+          "https://aviationweather.gov/api/data/metar?ids=OOSA&format=json&hours=3",
+          { headers: { Accept: "application/json" } }
+        )
         const data = await res.json()
         const arr = Array.isArray(data) ? data : []
         if (arr.length > 0) {
@@ -41,7 +48,7 @@ export default function Dashboard() {
         }
       } catch {
         setWeather({
-          metar: "METAR OOSA -- data currently unavailable",
+          metar: "METAR OOSA — data currently unavailable",
           windDir: 0, windSpeed: 0, visibility: 0,
           temperature: 0, dewpoint: 0, qnh: 0, clouds: "CLR",
         })
@@ -54,17 +61,24 @@ export default function Dashboard() {
 
   const fetchFlights = useCallback(async () => {
     try {
-      const res = await fetch("/api/flights")
+      // Direct call to OpenSky — no server needed
+      const url = `https://opensky-network.org/api/states/all?lamin=${OOSA.lat - RANGE}&lamax=${OOSA.lat + RANGE}&lomin=${OOSA.lon - RANGE}&lomax=${OOSA.lon + RANGE}`
+      const res = await fetch(url, { signal: AbortSignal.timeout(12000) })
+      if (!res.ok) throw new Error("opensky")
       const data = await res.json()
-      if (data.aircraft) {
-        setFlights({
-          active: data.aircraft.length,
-          arriving: data.aircraft.filter((a: { altitude: number }) => a.altitude > 0 && a.altitude < 5000).length,
-          departing: data.aircraft.filter((a: { altitude: number }) => a.altitude > 5000 && a.altitude < 15000).length,
-        })
-      }
+      const aircraft = (data.states ?? []).map((s: (string | number | boolean | null)[]) => ({
+        altitude: Math.round(((s[7] as number) || 0) * 3.28084),
+        lat: s[6] as number,
+        lon: s[5] as number,
+      })).filter((a: { lat: number; lon: number }) => a.lat && a.lon)
+
+      setFlights({
+        active: aircraft.length,
+        arriving: aircraft.filter((a: { altitude: number }) => a.altitude > 0 && a.altitude < 5000).length,
+        departing: aircraft.filter((a: { altitude: number }) => a.altitude > 5000 && a.altitude < 15000).length,
+      })
     } catch {
-      /* silent */
+      /* silent — flight count stays at 0 if OpenSky is unavailable */
     }
   }, [])
 
@@ -83,7 +97,7 @@ export default function Dashboard() {
     },
     {
       id: "weather", label: "Wind Conditions",
-      value: weather ? `${weather.windDir}deg/${weather.windSpeed}kt` : "--",
+      value: weather ? `${weather.windDir}°/${weather.windSpeed}kt` : "--",
       subtext: weather ? `Vis: ${weather.visibility}mi  |  QNH: ${weather.qnh}hPa` : "Loading...",
       icon: Wind, color: "#10b981", href: "/weather",
     },
@@ -178,7 +192,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white/5 rounded-lg p-4">
               <div className="flex items-center gap-2 text-white/50 text-sm mb-1"><Wind className="w-4 h-4" />Wind</div>
-              <p className="text-xl font-bold text-white font-mono">{weather.windDir}deg/{weather.windSpeed}kt</p>
+              <p className="text-xl font-bold text-white font-mono">{weather.windDir}°/{weather.windSpeed}kt</p>
             </div>
             <div className="bg-white/5 rounded-lg p-4">
               <div className="flex items-center gap-2 text-white/50 text-sm mb-1"><Eye className="w-4 h-4" />Visibility</div>
@@ -186,7 +200,7 @@ export default function Dashboard() {
             </div>
             <div className="bg-white/5 rounded-lg p-4">
               <div className="flex items-center gap-2 text-white/50 text-sm mb-1"><Thermometer className="w-4 h-4" />Temp</div>
-              <p className="text-xl font-bold text-white font-mono">{weather.temperature}C</p>
+              <p className="text-xl font-bold text-white font-mono">{weather.temperature}°C</p>
             </div>
             <div className="bg-white/5 rounded-lg p-4">
               <div className="flex items-center gap-2 text-white/50 text-sm mb-1"><Droplets className="w-4 h-4" />QNH</div>
@@ -216,7 +230,7 @@ export default function Dashboard() {
       </div>
 
       <div className="text-center text-xs text-white/30 py-4">
-        <p>NOT FOR OPERATIONAL USE - FOR EDUCATIONAL AND DEMONSTRATION PURPOSES ONLY</p>
+        <p>NOT FOR OPERATIONAL USE — FOR EDUCATIONAL AND DEMONSTRATION PURPOSES ONLY</p>
         <p className="mt-1">All data should be verified with official sources before use in flight operations</p>
       </div>
     </div>
